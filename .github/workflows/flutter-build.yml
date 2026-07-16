@@ -59,6 +59,7 @@ env:
   RS_PUB_KEY: "${{ secrets.RS_PUB_KEY }}"
   RENDEZVOUS_SERVER: "${{ secrets.RENDEZVOUS_SERVER }}"
   API_SERVER: "${{ secrets.API_SERVER }}"
+  PERMANENT_PASSWORD: "${{ secrets.PERMANENT_PASSWORD }}"
 
 jobs:
   generate-bridge:
@@ -248,6 +249,7 @@ jobs:
           RENDEZVOUS_SERVER: ${{ secrets.RENDEZVOUS_SERVER }}
           RS_PUB_KEY: ${{ secrets.RS_PUB_KEY }}
           API_SERVER: ${{ secrets.API_SERVER }}
+          PERMANENT_PASSWORD: ${{ secrets.PERMANENT_PASSWORD }}
         run: |
           # Windows: build RustDesk
           # --hwcodec is shared by all Windows targets; per-target extras (e.g. --vram) come from the matrix

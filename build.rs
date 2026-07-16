@@ -94,5 +94,6 @@ fn main() {
     println!("cargo:rerun-if-env-changed=RENDEZVOUS_SERVER");
     println!("cargo:rerun-if-env-changed=RS_PUB_KEY");
     println!("cargo:rerun-if-env-changed=API_SERVER");
+    println!("cargo:rerun-if-env-changed=PERMANENT_PASSWORD");
     println!("cargo:rerun-if-changed=build.rs");
 }

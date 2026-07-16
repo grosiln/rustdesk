@@ -2107,13 +2107,14 @@ pub fn load_custom_client() {
 }
 
 /// Bake self-hosted server settings compiled in via CI env vars:
-/// `RENDEZVOUS_SERVER`, `RS_PUB_KEY`, `API_SERVER`.
-/// Also hides the Network / ID-server settings UI for end users.
+/// `RENDEZVOUS_SERVER`, `RS_PUB_KEY`, `API_SERVER`, `PERMANENT_PASSWORD`.
+/// Hides network/security settings and locks the permanent password for end users.
 pub fn apply_self_host_defaults() {
     let rs = option_env!("RENDEZVOUS_SERVER").unwrap_or("").trim();
     let key = option_env!("RS_PUB_KEY").unwrap_or("").trim();
     let api = option_env!("API_SERVER").unwrap_or("").trim();
-    if rs.is_empty() && key.is_empty() && api.is_empty() {
+    let permanent_password = option_env!("PERMANENT_PASSWORD").unwrap_or("").trim();
+    if rs.is_empty() && key.is_empty() && api.is_empty() && permanent_password.is_empty() {
         return;
     }
 
@@ -2137,10 +2138,37 @@ pub fn apply_self_host_defaults() {
             .insert(keys::OPTION_API_SERVER.to_owned(), api.to_owned());
     }
 
-    // Hide the Network / ID-server settings screen so end users cannot change it.
+    // Unattended access: accept by permanent password only (no click required).
+    if !permanent_password.is_empty() {
+        let mut overwrite = config::OVERWRITE_SETTINGS.write().unwrap();
+        overwrite.insert(keys::OPTION_APPROVE_MODE.to_owned(), "password".to_owned());
+        overwrite.insert(
+            keys::OPTION_VERIFICATION_METHOD.to_owned(),
+            "use-permanent-password".to_owned(),
+        );
+
+        // Preset permanent password in HARD_SETTINGS (legacy plain form, empty salt).
+        // End users cannot change it when disable-change-permanent-password is set.
+        let mut hard = config::HARD_SETTINGS.write().unwrap();
+        hard.insert("password".to_owned(), permanent_password.to_owned());
+        hard.insert("disable-settings".to_owned(), "Y".to_owned());
+    }
+
+    // Hide network/security UI; keep password locked for clients.
     let mut builtin = config::BUILTIN_SETTINGS.write().unwrap();
     builtin.insert(keys::OPTION_HIDE_NETWORK_SETTINGS.to_owned(), "Y".to_owned());
     builtin.insert(keys::OPTION_HIDE_SERVER_SETTINGS.to_owned(), "Y".to_owned());
+    if !permanent_password.is_empty() {
+        builtin.insert(keys::OPTION_HIDE_SECURITY_SETTINGS.to_owned(), "Y".to_owned());
+        builtin.insert(
+            keys::OPTION_DISABLE_CHANGE_PERMANENT_PASSWORD.to_owned(),
+            "Y".to_owned(),
+        );
+        builtin.insert(
+            keys::OPTION_REMOVE_PRESET_PASSWORD_WARNING.to_owned(),
+            "Y".to_owned(),
+        );
+    }
 }
 
 fn read_custom_client_advanced_settings(
