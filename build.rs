@@ -90,5 +90,9 @@ fn main() {
         build_mac();
         println!("cargo:rustc-link-lib=framework=ApplicationServices");
     }
+    // Self-host custom client: bake server settings from CI/build environment.
+    println!("cargo:rerun-if-env-changed=RENDEZVOUS_SERVER");
+    println!("cargo:rerun-if-env-changed=RS_PUB_KEY");
+    println!("cargo:rerun-if-env-changed=API_SERVER");
     println!("cargo:rerun-if-changed=build.rs");
 }

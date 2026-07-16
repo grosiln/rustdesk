@@ -9,6 +9,10 @@ on:
       upload-tag:
         type: string
         default: "nightly"
+      only-windows:
+        type: boolean
+        default: false
+        description: "Build only Windows x64 Flutter client (self-host)"
 
 # NOTE: F-Droid builder script 'flutter/build_fdroid.sh' reads environment
 # variables from this workflow!
@@ -51,6 +55,10 @@ env:
   MACOS_P12_BASE64: "${{ secrets.MACOS_P12_BASE64 }}"
   UPLOAD_ARTIFACT: "${{ inputs.upload-artifact }}"
   SIGN_BASE_URL: "${{ secrets.SIGN_BASE_URL }}-2"
+  # Self-host custom client (compiled into binary via option_env!)
+  RS_PUB_KEY: "${{ secrets.RS_PUB_KEY }}"
+  RENDEZVOUS_SERVER: "${{ secrets.RENDEZVOUS_SERVER }}"
+  API_SERVER: "${{ secrets.API_SERVER }}"
 
 jobs:
   generate-bridge:
@@ -70,6 +78,8 @@ jobs:
               target: windows-11-arm,
               platform: ARM64,
             }
+    # ARM topmost is only needed for Windows ARM Flutter builds
+    if: ${{ !inputs.only-windows || matrix.job.platform == 'x64' }}
     with:
       upload-artifact: ${{ inputs.upload-artifact }}
       target: ${{ matrix.job.target }}
@@ -85,10 +95,25 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { target: x86_64-pc-windows-msvc, os: windows-2022 }
-          - { target: aarch64-linux-android, os: ubuntu-latest }
-          - { target: armv7-linux-androideabi, os: ubuntu-latest }
-          - { target: x86_64-linux-android, os: ubuntu-latest }
+          - {
+              target: x86_64-pc-windows-msvc,
+              os: windows-2022,
+              arch: x86_64,
+              flutter-arch: x64,
+              vcpkg-triplet: x64-windows-static,
+              build-args: "--vram",
+            }
+          - {
+              target: aarch64-pc-windows-msvc,
+              os: windows-11-arm,
+              arch: aarch64,
+              flutter-arch: arm64,
+              vcpkg-triplet: arm64-windows-static,
+              # vram is x86/x64-only (NVENC needs CUDA, Intel MediaSDK needs __rdtsc);
+              # no NV/Intel/AMD hardware exists on Windows-on-ARM, so vram stays disabled here.
+              build-args: "",
+            }
+    if: ${{ !inputs.only-windows || matrix.job.arch == 'x86_64' }}
     steps:
       - name: Export GitHub Actions cache environment variables
         uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
@@ -236,6 +261,10 @@ jobs:
         run: echo "SODIUM_LIB_DIR=$VCPKG_ROOT/installed/${{ matrix.job.vcpkg-triplet }}/lib" >> "$GITHUB_ENV"
 
       - name: Build rustdesk
+        env:
+          RENDEZVOUS_SERVER: ${{ secrets.RENDEZVOUS_SERVER }}
+          RS_PUB_KEY: ${{ secrets.RS_PUB_KEY }}
+          API_SERVER: ${{ secrets.API_SERVER }}
         run: |
           # Windows: build RustDesk
           # --hwcodec is shared by all Windows targets; per-target extras (e.g. --vram) come from the matrix
@@ -361,6 +390,7 @@ jobs:
 
   # The fallback for the flutter version, we use Sciter for 32bit Windows.
   build-for-windows-sciter:
+    if: ${{ !inputs.only-windows }}
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
     runs-on: ${{ matrix.job.os }}
     # Temporarily disable this action due to additional test is needed.
@@ -512,6 +542,7 @@ jobs:
             ./SignOutput/rustdesk-*.exe
 
   build-rustdesk-ios:
+    if: ${{ !inputs.only-windows }}
     if: ${{ inputs.upload-artifact }}
     name: build rustdesk ios ipa
     runs-on: ${{ matrix.job.os }}
@@ -632,6 +663,7 @@ jobs:
 
 
   build-for-macOS:
+    if: ${{ !inputs.only-windows }}
     name: ${{ matrix.job.target }}
     runs-on: ${{ matrix.job.os }}
     needs: [generate-bridge]
@@ -850,6 +882,7 @@ jobs:
             rustdesk*-${{ matrix.job.arch }}.dmg
 
   publish_unsigned:
+    if: ${{ !inputs.only-windows }}
     needs:
       - build-for-macOS
       - build-for-windows-flutter
@@ -893,6 +926,7 @@ jobs:
           files: rustdesk-${{ env.VERSION }}-unsigned.tar.gz
 
   build-rustdesk-android:
+    if: ${{ !inputs.only-windows }}
     needs: [generate-bridge]
     name: build rustdesk android apk ${{ matrix.job.target }}
     runs-on: ${{ matrix.job.os }}
@@ -1185,6 +1219,7 @@ jobs:
             signed-apk/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
 
   build-rustdesk-android-universal:
+    if: ${{ !inputs.only-windows }}
     needs: [build-rustdesk-android]
     name: build rustdesk android universal apk
     if: ${{ inputs.upload-artifact }}
@@ -1369,6 +1404,7 @@ jobs:
             signed-apk/rustdesk-${{ env.VERSION }}-universal${{ env.suffix }}.apk
 
   build-rustdesk-linux:
+    if: ${{ !inputs.only-windows }}
     needs: [generate-bridge]
     name: build rustdesk linux ${{ matrix.job.target }}
     runs-on: ${{ matrix.job.on }}
@@ -1706,6 +1742,7 @@ jobs:
             res/rustdesk-${{ env.VERSION }}*.zst
 
   build-rustdesk-linux-sciter:
+    if: ${{ !inputs.only-windows }}
     if: ${{ inputs.upload-artifact }}
     runs-on: ${{ matrix.job.on }}
     name: build-rustdesk-linux-sciter ${{ matrix.job.target }}
@@ -1933,6 +1970,7 @@ jobs:
           path: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.deb
 
   build-appimage:
+    if: ${{ !inputs.only-windows }}
     name: Build appimage ${{ matrix.job.target }}
     needs: [build-rustdesk-linux]
     runs-on: ubuntu-22.04
@@ -1984,6 +2022,7 @@ jobs:
             ./appimage/rustdesk-${{ env.VERSION }}-*.AppImage
 
   build-flatpak:
+    if: ${{ !inputs.only-windows }}
     name: Build flatpak ${{ matrix.job.target }}${{ matrix.job.suffix }}
     needs:
       - build-rustdesk-linux
@@ -2069,6 +2108,7 @@ jobs:
             flatpak/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}${{ matrix.job.suffix }}.flatpak
 
   build-rustdesk-web:
+    if: ${{ !inputs.only-windows }}
     if: False
     name: build-rustdesk-web
     runs-on: ubuntu-22.04

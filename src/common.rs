@@ -2084,10 +2084,12 @@ pub fn load_custom_client() {
     #[cfg(debug_assertions)]
     if let Ok(data) = std::fs::read_to_string("./custom.txt") {
         read_custom_client(data.trim());
+        apply_self_host_defaults();
         return;
     }
     let Some(path) = std::env::current_exe().map_or(None, |x| x.parent().map(|x| x.to_path_buf()))
     else {
+        apply_self_host_defaults();
         return;
     };
     #[cfg(target_os = "macos")]
@@ -2096,10 +2098,49 @@ pub fn load_custom_client() {
     if path.is_file() {
         let Ok(data) = std::fs::read_to_string(&path) else {
             log::error!("Failed to read custom client config");
+            apply_self_host_defaults();
             return;
         };
         read_custom_client(&data.trim());
     }
+    apply_self_host_defaults();
+}
+
+/// Bake self-hosted server settings compiled in via CI env vars:
+/// `RENDEZVOUS_SERVER`, `RS_PUB_KEY`, `API_SERVER`.
+/// Also hides the Network / ID-server settings UI for end users.
+pub fn apply_self_host_defaults() {
+    let rs = option_env!("RENDEZVOUS_SERVER").unwrap_or("").trim();
+    let key = option_env!("RS_PUB_KEY").unwrap_or("").trim();
+    let api = option_env!("API_SERVER").unwrap_or("").trim();
+    if rs.is_empty() && key.is_empty() && api.is_empty() {
+        return;
+    }
+
+    if !rs.is_empty() {
+        *config::PROD_RENDEZVOUS_SERVER.write().unwrap() = rs.to_owned();
+        config::OVERWRITE_SETTINGS
+            .write()
+            .unwrap()
+            .insert(keys::OPTION_CUSTOM_RENDEZVOUS_SERVER.to_owned(), rs.to_owned());
+    }
+    if !key.is_empty() {
+        config::OVERWRITE_SETTINGS
+            .write()
+            .unwrap()
+            .insert("key".to_owned(), key.to_owned());
+    }
+    if !api.is_empty() {
+        config::OVERWRITE_SETTINGS
+            .write()
+            .unwrap()
+            .insert(keys::OPTION_API_SERVER.to_owned(), api.to_owned());
+    }
+
+    // Hide the Network / ID-server settings screen so end users cannot change it.
+    let mut builtin = config::BUILTIN_SETTINGS.write().unwrap();
+    builtin.insert(keys::OPTION_HIDE_NETWORK_SETTINGS.to_owned(), "Y".to_owned());
+    builtin.insert(keys::OPTION_HIDE_SERVER_SETTINGS.to_owned(), "Y".to_owned());
 }
 
 fn read_custom_client_advanced_settings(
@@ -2249,6 +2290,7 @@ pub fn read_custom_client(config: &str) {
                 .insert(k, v.to_owned());
         };
     }
+    apply_self_host_defaults();
 }
 
 #[inline]
