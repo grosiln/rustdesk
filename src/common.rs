@@ -2107,8 +2107,11 @@ pub fn load_custom_client() {
 }
 
 /// Bake self-hosted server settings compiled in via CI env vars:
-/// `RENDEZVOUS_SERVER`, `RS_PUB_KEY`, `API_SERVER`, `PERMANENT_PASSWORD`.
-/// Hides network/security settings and locks the permanent password for end users.
+/// `RENDEZVOUS_SERVER`, `RS_PUB_KEY`, `API_SERVER`, optional `PERMANENT_PASSWORD`.
+///
+/// Without `PERMANENT_PASSWORD`: only prefills ID/API/key in DEFAULT_SETTINGS
+/// (network settings stay visible and editable).
+/// With `PERMANENT_PASSWORD`: locked client (overwrite + hidden network/security).
 pub fn apply_self_host_defaults() {
     let rs = option_env!("RENDEZVOUS_SERVER").unwrap_or("").trim();
     let key = option_env!("RS_PUB_KEY").unwrap_or("").trim();
@@ -2118,28 +2121,30 @@ pub fn apply_self_host_defaults() {
         return;
     }
 
-    if !rs.is_empty() {
-        *config::PROD_RENDEZVOUS_SERVER.write().unwrap() = rs.to_owned();
-        config::OVERWRITE_SETTINGS
-            .write()
-            .unwrap()
-            .insert(keys::OPTION_CUSTOM_RENDEZVOUS_SERVER.to_owned(), rs.to_owned());
-    }
-    if !key.is_empty() {
-        config::OVERWRITE_SETTINGS
-            .write()
-            .unwrap()
-            .insert("key".to_owned(), key.to_owned());
-    }
-    if !api.is_empty() {
-        config::OVERWRITE_SETTINGS
-            .write()
-            .unwrap()
-            .insert(keys::OPTION_API_SERVER.to_owned(), api.to_owned());
-    }
+    let lock_client = !permanent_password.is_empty();
 
-    // Unattended access: accept by permanent password only (no click required).
-    if !permanent_password.is_empty() {
+    if lock_client {
+        if !rs.is_empty() {
+            *config::PROD_RENDEZVOUS_SERVER.write().unwrap() = rs.to_owned();
+            config::OVERWRITE_SETTINGS
+                .write()
+                .unwrap()
+                .insert(keys::OPTION_CUSTOM_RENDEZVOUS_SERVER.to_owned(), rs.to_owned());
+        }
+        if !key.is_empty() {
+            config::OVERWRITE_SETTINGS
+                .write()
+                .unwrap()
+                .insert("key".to_owned(), key.to_owned());
+        }
+        if !api.is_empty() {
+            config::OVERWRITE_SETTINGS
+                .write()
+                .unwrap()
+                .insert(keys::OPTION_API_SERVER.to_owned(), api.to_owned());
+        }
+
+        // Unattended access: accept by permanent password only (no click required).
         let mut overwrite = config::OVERWRITE_SETTINGS.write().unwrap();
         overwrite.insert(keys::OPTION_APPROVE_MODE.to_owned(), "password".to_owned());
         overwrite.insert(
@@ -2148,17 +2153,13 @@ pub fn apply_self_host_defaults() {
         );
 
         // Preset permanent password in HARD_SETTINGS (legacy plain form, empty salt).
-        // End users cannot change it when disable-change-permanent-password is set.
         let mut hard = config::HARD_SETTINGS.write().unwrap();
         hard.insert("password".to_owned(), permanent_password.to_owned());
         hard.insert("disable-settings".to_owned(), "Y".to_owned());
-    }
 
-    // Hide network/security UI; keep password locked for clients.
-    let mut builtin = config::BUILTIN_SETTINGS.write().unwrap();
-    builtin.insert(keys::OPTION_HIDE_NETWORK_SETTINGS.to_owned(), "Y".to_owned());
-    builtin.insert(keys::OPTION_HIDE_SERVER_SETTINGS.to_owned(), "Y".to_owned());
-    if !permanent_password.is_empty() {
+        let mut builtin = config::BUILTIN_SETTINGS.write().unwrap();
+        builtin.insert(keys::OPTION_HIDE_NETWORK_SETTINGS.to_owned(), "Y".to_owned());
+        builtin.insert(keys::OPTION_HIDE_SERVER_SETTINGS.to_owned(), "Y".to_owned());
         builtin.insert(keys::OPTION_HIDE_SECURITY_SETTINGS.to_owned(), "Y".to_owned());
         builtin.insert(
             keys::OPTION_DISABLE_CHANGE_PERMANENT_PASSWORD.to_owned(),
@@ -2168,6 +2169,18 @@ pub fn apply_self_host_defaults() {
             keys::OPTION_REMOVE_PRESET_PASSWORD_WARNING.to_owned(),
             "Y".to_owned(),
         );
+    } else {
+        // Prefill only — customer can edit network settings later.
+        let mut defaults = config::DEFAULT_SETTINGS.write().unwrap();
+        if !rs.is_empty() {
+            defaults.insert(keys::OPTION_CUSTOM_RENDEZVOUS_SERVER.to_owned(), rs.to_owned());
+        }
+        if !key.is_empty() {
+            defaults.insert("key".to_owned(), key.to_owned());
+        }
+        if !api.is_empty() {
+            defaults.insert(keys::OPTION_API_SERVER.to_owned(), api.to_owned());
+        }
     }
 }
 

@@ -2,9 +2,15 @@ name: Windows Self-Host Client
 
 # Builds only Windows x64 Flutter client with self-host server settings
 # from repository secrets: RENDEZVOUS_SERVER, RS_PUB_KEY, API_SERVER
+# Optional: PERMANENT_PASSWORD (locked client) via include-permanent-password.
 
 on:
   workflow_dispatch:
+    inputs:
+      include-permanent-password:
+        description: "Bake permanent password and lock network settings"
+        type: boolean
+        default: false
 
 jobs:
   run-ci:
@@ -14,3 +20,4 @@ jobs:
       upload-artifact: true
       upload-tag: selfhost-windows
       only-windows: true
+      include-permanent-password: ${{ inputs.include-permanent-password }}

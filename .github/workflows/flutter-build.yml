@@ -13,6 +13,10 @@ on:
         type: boolean
         default: false
         description: "Build only Windows x64 Flutter client (self-host)"
+      include-permanent-password:
+        type: boolean
+        default: false
+        description: "Bake PERMANENT_PASSWORD and lock network/security UI"
 
 # NOTE: F-Droid builder script 'flutter/build_fdroid.sh' reads environment
 # variables from this workflow!
@@ -59,7 +63,8 @@ env:
   RS_PUB_KEY: "${{ secrets.RS_PUB_KEY }}"
   RENDEZVOUS_SERVER: "${{ secrets.RENDEZVOUS_SERVER }}"
   API_SERVER: "${{ secrets.API_SERVER }}"
-  PERMANENT_PASSWORD: "${{ secrets.PERMANENT_PASSWORD }}"
+  # Empty unless include-permanent-password is true (unlocked preset build by default).
+  PERMANENT_PASSWORD: "${{ inputs.include-permanent-password && secrets.PERMANENT_PASSWORD || '' }}"
 
 jobs:
   generate-bridge:
@@ -249,7 +254,7 @@ jobs:
           RENDEZVOUS_SERVER: ${{ secrets.RENDEZVOUS_SERVER }}
           RS_PUB_KEY: ${{ secrets.RS_PUB_KEY }}
           API_SERVER: ${{ secrets.API_SERVER }}
-          PERMANENT_PASSWORD: ${{ secrets.PERMANENT_PASSWORD }}
+          PERMANENT_PASSWORD: ${{ inputs.include-permanent-password && secrets.PERMANENT_PASSWORD || '' }}
         run: |
           # Windows: build RustDesk
           # --hwcodec is shared by all Windows targets; per-target extras (e.g. --vram) come from the matrix
